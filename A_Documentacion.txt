@@ -1,0 +1,497 @@
+Indice:
+1.  Informacion general 
+    1.1 Objetivo 
+2.  Descripcion general
+    2.1 Hardware. Descripcion de la placa PCL(ambos modelos)
+    2.2 Software. Archivos que lo componen
+        2.2.0   A_Documentacion.txt                                 
+        2.2.1   aba_wie.h / aba_wie.c
+        2.2.2   cnt_power.h / cnt_power.c
+        2.2.3   compile_code.h 
+        2.2.4   def_global_var.h / def_global_var.c
+        2.2.5   def_hardware.h / def_hardware.c 
+        2.2.6   eeprom.h / eeprom.c 
+        2.2.7   interrup.h / interrup.c
+        2.2.8   main.c
+        2.2.9   osdp.h / osdp.c
+        2.2.10  osdp_functions.h / osdp_functions.c
+        2.2.11  read_pulse.h / read_pulse.c
+        2.2.12  st_inputs_analogical.h / st_inputs_analogical.c  
+        2.2.13  st_inputs_digital.h / st_inputs_digital.c
+        2.2.14  st_monitoring.h / st_monitoring.c 
+        2.2.15  st_osdp.h / st_osdp.c
+        2.2.16  st_outputs.h / st_outputs.c
+        2.2.17  st_readers.h / st_readers.c
+        2.2.18  st_rs485.h / st_rs485.c
+        2.2.19  st_timers.h / st_timers.c
+        2.2.20  state_machine.h / state_machine.c
+3.  Sistema
+    3.1 Compilar imagen
+    3.2 Funcionamiento del sistema
+        3.2.1 Inicializacion del sistema
+        3.2.2 Puntos importantes para mencionar: (ayudaran para comprender el codigo rapidamente)
+            3.2.2.1 Estado General
+            3.2.2.2 OSDP
+        3.2.3 Señalizacion
+        3.2.4 FSM. Engine
+        3.2.5 Comandos OSDP nativos (Open Supervised Device Protocol (OSDP) Version 2.1.5)
+            3.2.5.1 OSDP_POLL (0x60) Poll
+            3.2.5.2 OSDP_ISTAT (0x65) Input Status Report Request
+            3.2.5.3 OSDP_OSTAT (0x66) Output Status Report Request
+            3.2.5.4 OSDP_OUT (0x68) Output Control Command
+            3.2.5.5 OSDP_COMSET (0x6E) Communication Configuration Command
+        3.2.6 Comandos OSDP Skylock propietarios 
+            3.2.6.1 OSDP_FACTORY (0xD0) Set Factory Default
+            3.2.6.2 OSDP_RESET (0xD2) Reset System
+            3.2.6.3 OSDP_ESTABLISH (0xD4) Set Values
+            3.2.6.4 OSDP_WATCH (0xD6) Status Errors Command
+            3.2.6.5 OSDP_CONFIG (0xD9) Configuracion del Sistema
+            3.2.6.6 Comandos OSDP reconocidos y no implementados para Skylock
+            3.2.6.7 Comandos OSDP no reconocidos
+        3.2.7 Inicializacion-Servicio del sistema
+            3.2.7.1 Secuencia de inicializacion del sistema      
+            3.2.7.2 Posterior a la inicializacion con PD_ID = 0x7E
+            3.2.7.3 Posterior a la inicializacion con PD_ID = 0x00 - 0x7D
+            3.2.7.4 En Servicio
+            3.2.7.5 Configurar el sistema a Factory Default en forma manual
+4.  Temas pendientes de resolucion
+5.  Temas a considerar en la proxima version
+
+
+
+
+
+
+
+1.  Informacion general 
+        Nombre Software:        Skylock
+        Version:                1.0
+        Date:                   30/11/2018
+        IDE:                    MPLAB X IDE v3.30
+        Compiler:               XC8 v1.37
+        Microcontrolador:       PIC18F4520
+        Hardware compatible:    PCC 2.0 y 3.0 
+                                PCL 2.0 y 3.0
+
+    1.1 Objetivo 
+        Control y administracion de perisfericos asociados a la placa controladora PCL. Comunicacion con la 
+        placa PCC mediante el protocolo Open Supervised Device Protocol (OSDP) Version 2.1.5
+
+2.  Descripcion general
+    Existen dos formatos de placa PCL, una es autonoma y la otra es la que se encuentra contenida dentro 
+    de la placa PCC.
+    Independientemente cual sea la placa PCL, el firmaware desarrollado sirve para ambas solo se
+    debe seleccionar el modelo antes de compilar el proyecto. Ver compile_code.h
+
+    2.1 Hardware. Descripcion de la placa PCL(ambos modelos)
+            Microcontrolador(Real Time) 	PIC18F4520
+            Entradas de Lectoras            2 Lectoras (ABA-Track II ? Wiegand (26-35-37))
+            Entradas digitales              6	 
+            Entrada digital Tamper          1	 
+            Salidas Relé                    3 (Contactos NA-NC)
+            Salida Alarma/Buzzer            1	 
+            Salida auxiliar(12Vcc)          1	 
+            Señalización Led                24	 
+            Comunicación                    1 RS485
+            Configuracion manual            1 Touch switch
+            Sensorres:                      1 Tensión de entrada
+                                            1 Corriente de entrada
+                                            1 Temperatura on board
+                                            7 One wire es soportado en forma externa
+                                            2 Medición analógica intensidad de corriente en Rele A y Rele B
+            Protección                      6 Polyswitch (Alimentacion y salidas) 
+            Memoria Adicional               1 EEPROM 24LC256SN
+            Alimentación:                   1 Bornera (12vcc a 16Vcc 1A)
+                                            1 Jack (12vcc a 16Vcc 1A)
+
+    2.2 Software. Archivos que lo componen
+        2.2.0   A_Documentacion.txt                                 
+                informacion general del software Skylock version 1.0
+
+        2.2.1   aba_wie.h / aba_wie.c
+                Decodificación lógica de los pulsos de lectura en formato ABA Track II
+                y Wiegand 26, 35 y 37. Se informan las lecturas con error.
+
+        2.2.2   cnt_power.h / cnt_power.c
+                Evalua el motivo de inicializacion de la placa y lo adiciona en la eeprom
+                para su posterior analisis si es requerido. (POR - BOR - TO - PD - Reset)
+
+        2.2.3   compile_code.h 
+                Desde este lugar se puede seleccionar para cual de los dos modelos de placa
+                PCL se debera compilar el codigo. (Autonoma o contenida en placa PCC)
+
+        2.2.4   def_global_var.h / def_global_var.c
+                En este lugar estan definidas las variables, cconstantes y extructuras globales.
+
+        2.2.5   def_hardware.h / def_hardware.c 
+                Se define el pin-out y registros del microcontrolador. Se utilizo la configuracion
+                HSPLL para multiplicar la frecuencia del cristal por 4, llegando a una frecuencia de
+                39321600 Hz ((XTAL = 9830400 Hz)*4 = 39321600 Hz)
+
+        2.2.6   eeprom.h / eeprom.c 
+                Los datos como contadores de inicializacion, Factory default y datos de configuracion
+                de la placa son guardados en memoria eeprom. Tambien se definen funciones de lectura y 
+                escritura de la eeprom.
+
+        2.2.7   interrup.h / interrup.c
+                Vector de interrupcion. 
+
+        2.2.8   main.c
+                Rutina principal de inicializacion y funcionamiento.
+                Inicializa hardware, watchdog, vector de interrupciones, contadores de power reset,
+                engine de la FSM y finalmente genera un delay antes de ponerse productivo.
+
+        2.2.9   osdp.h / osdp.c
+                Se definen comandos OSDP, comandos propietario de Skylock y calculo de CRC.
+
+        2.2.10  osdp_functions.h / osdp_functions.c
+                En esta libreria se definen las funciones que se utilizan para resolver los
+                comandos OSDP
+
+        2.2.11  read_pulse.h / read_pulse.c
+                Lectura de pulsos de dispositivos de lectura (Wiegand/ABA Track II)
+
+        2.2.12  st_inputs_analogical.h / st_inputs_analogical.c  
+                FSM(Finite State Machine). Control de entradas analógicas. Las entradas analógicas sirven a los dos circuitos 
+                integrados smd ACS712.(medir corriente sobre bornes de potencia de los rele).
+
+        2.2.13  st_inputs_digital.h / st_inputs_digital.c
+                FSM(Finite State Machine). Este módulo lee las entradas digitales, almacena su estado actual y anterior 
+                en inputs_pcl []. Maneja su propia tabla.
+
+        2.2.14  st_monitoring.h / st_monitoring.c 
+                FSM(Finite State Machine). Su funcion principal en la inicializacion
+                es el monitoreo de distintos comandos por ejemplo Reset, Factory Default, Touch switch, On-Line, otros 
+                Se nutre de informacion de otras tablas.
+
+        2.2.15  st_osdp.h / st_osdp.c
+                FSM(Finite State Machine). Decodifica y codifica la trama OSDP.
+                Control contadores de errores trama OSDP:
+                            count_err_chks_osdp (Contador errores de checksum) 
+                            count_min_byte_osdp (Contador errores de recepcion tramas menores al tamaño minimo establecido por OSDP)
+                            count_max_byte_osdp (Contador errores de recepcion tramas mayores al tamaño maximo establecido por OSDP)   
+                            count_max_buf_osdp  (Contador errores de recepcion tramas con tamaño mayor al soportado por la placa y menor del establecido por OSDP)
+
+        2.2.16  st_outputs.h / st_outputs.c
+                FSM(Finite State Machine). Este módulo controla leds, relés, energia de salida
+                para lectores. Los datos se almacenan en output_signaling_pcl []. Maneja su propia tabla.
+
+        2.2.17  st_readers.h / st_readers.c
+                FSM(Finite State Machine). Control de lectura y transferencia logica.(wiegand / ABA Track II)
+
+        2.2.18  st_rs485.h / st_rs485.c
+                FSM(Finite State Machine). Controla la comunicacion RS485.
+                Control contadores de errores:
+                            count_FERR (Contador de Framing Error)  
+                            count_OERR (Contador de Overrun Error) 
+    
+        2.2.19  st_timers.h / st_timers.c
+                FSM(Finite State Machine).Controla la tabla de temporizadores del sistema.
+
+        2.2.20  state_machine.h / state_machine.c
+                FSM(Finite State Machine). Engine.  
+
+3.  Sistema
+    3.1 Compilar imagen
+        Se pueden obtener dos imagenes del software al compilar, una para la placa PCL autonoma y otra para la contenida en la 
+        placa PCC. Esa eleccion se realiza en compile_code.h. 
+
+    3.2 Funcionamiento del sistema
+        3.2.1 Inicializacion del sistema
+              Al inicializarse el sistema se realizan tareas de configuracion como pinout del microcontrolador, control de las interrupciones,
+              clock en modo HSPLL (Clock Frequency = 4 x FOSC1), habilitacion del Watchdog (Ocurre cada 1.024 seg), actualizacion de los contadores
+              de power-on en la eeprom, inicializacion del engine de la FSM y un retardo para control de la comunicacion.
+              A partir de esta etapa comienza a funcionar el engine que inicializa cada una de las FSM dejandolas en produccion.
+
+        3.2.2 Puntos importantes para mencionar: (ayudaran para comprender el codigo rapidamente)
+            3.2.2.1 Estado General
+                    - El cada inicio o reinicio del sistema se actualizan los contadores de power-on que se encuentran el la eeprom, estos pueden ser
+                      visualizados mediante comandos.
+                    - Los parametros de Factory Default, Usuario e informacion del sistema se encuentran en la eeprom, se pueden acceder mediante comando OSDP.  
+                    - El sistema informa por harware mediante el led out_led_0 si el PD_ID de la placa es un Factory Default o esta definido en un rango 
+                      permitido para usuarios.
+                    - El sistema informa por harware mediante el led out_led_1 si la placa fue configurada por el Panel de Control despues del ultimo inicio o 
+                      reinicio, tambien lo hace por software cuando el Panel de Control se comunica por el canal RS485 mediante el protocolo OSDP.
+                    - El touch switch permite configurar la placa en modo Factory Default si se lo tiene apretado por mas tiempo que el definido en TOUCH_SWITCH, 
+                      en tiempos menores de presionado podria ser utilizado para otros propositos.
+                    - El sistema despues de la primera comunicacion exitosa con el Panel de Control pasara a modo On-Line y permanecera en el si no se supera el tiempo 
+                      definido en ON_LINE entre comunicaciones exitosas. Si se supera el sistema generara un auto reset y se reiniciara solicitando se lo configure en la 
+                      proxima comunicacion exitosa.
+                      Una comunicaciones exitosa es cuando el Panel de control envia cualquier comando con el PD_ID de la placa o mediante el broadcast. 
+                    - Las entradas digitales, analogicas y readers se inicializan deshabilitadas, se deberan habilitar mediante comando  
+
+            3.2.2.2 OSDP
+                    - Utiliza el protocolo OSDP para comunicacion
+                    - Verifica que cada comando OSDP contiene la cantidad de bytes que le fue definido.
+                    - Analiza respuesta del modulo ante un broadcast.
+                    - El PD_ID con valor 0x7E pertenece al Factory Default
+                    - El PD_ID con valor 0x7F pertenece al Broadcast
+                    - Responde ante errores de comandos en la trama OSDP durante la comunicacion.
+                    - Informa estado de los contadores de errores a demanda mediante comando OSDP.
+        
+        3.2.3 Señalizacion
+              La placa PCL autonoma tiene un total de 24 leds, la placa PCL contenida en la placa PCC tambien tiene los misma cantidad mas los propios 
+              de la placa PCC.
+              Para facilitar la comprencion clasificaremos los leds en dos grupos, los que son controlados por el microcontrolador y los que no.
+
+              Controlados por el microcontrolador:
+                    out_led_b1  Green color     Led Lectora B1                                                             
+                    out_led_a1  Green color     Led Lectora A1                                                             
+                    out_led_b2  Red color       Led Lectora B2                                                             
+                    out_led_a2  Red color       Led Lectora A2
+                    out_act_lec Blue color      Power Lectora (Se encienden dos Leds azules)                                                             
+                    out_alarm   Red color       Alarma                                                             
+                    out_rele_a  Green color     Rele A                                                             
+                    out_rele_b  Green color     Rele B                                                             
+                    out_rele_c  Green color     Rele C                                                             
+                    out_led_5   Blue color      Indica conexion con PCC (Apagado: No conexion / Destellando: ON-Line)                                                            
+                    out_led_4   Red color       No definido                                                             
+                    out_led_3   Green color     Indica estado del sistema (Encendido: Inicializando / Destellando: Sistema activo)                                                             
+                    out_led_2   White color     No definido                                                             
+                    out_led_1   White color     Configuracion (Destellando: Sistema No configurado despues del ultimo inicio / Apagado: Sistema configurado)                                                             
+                    out_led_0   White color     Indica valor PD-ID. (Destellando: 7E (Factory Default) / Encendido: Otro valor dentro de los permitidos)                                                              
+
+              No Controlados por el microcontrolador: Al activar la entrada se enciende el led correspondiente
+                    tamp    Green color     Tamper                                                             
+                    inbb    Green color     Entrada de lectora BA                                                             
+                    inab    Green color     Entrada de lectora AB                                                             
+                    i_aux1  Green color     Entrada auxiliar Input Aux1                                                             
+                    inaa    Green color     Entrada de lectora AA                                                             
+                    inba    Green color     Entrada de lectora BA                                                             
+                    i_aux2  Green color     Entrada auxiliar Input Aux2                                                             
+                            Red color       Power On
+
+        3.2.4 FSM. Engine
+              Engine:
+                    state_machine.h / state_machine.c 
+
+              FSM(Finite State Machine)
+                    st_inputs_analogical.h / st_inputs_analogical.c  
+                    st_inputs_digital.h / st_inputs_digital.c
+                    st_monitoring.h / st_monitoring.c 
+                    st_osdp.h / st_osdp.c
+                    st_outputs.h / st_outputs.c
+                    st_readers.h / st_readers.c
+                    st_rs485.h / st_rs485.c
+                    st_timers.h / st_timers.c
+
+        3.2.5 Comandos OSDP nativos (Open Supervised Device Protocol (OSDP) Version 2.1.5)
+            3.2.5.1 OSDP_POLL (0x60) Poll
+                    Tamaño 1 byte 
+                    No actua ni responde ante un Broadcast
+                    
+                    El Panel de control envia este comando periodicamente al PD_ID, si este dispone de informacion para reportar como entradas digitales,
+                    analogicas o de readers lo informa caso contrario respondera con un acknoledge.  
+
+                    Comando de respuesta:
+                                            OSDP_ACK(0x40)          Si no tiene novedades
+                                            OSDP_ISTATR(0x49)       Si reporta entradas
+                                            OSDP_FMT(0x51)          Si reporta Readers
+
+            3.2.5.2 OSDP_ISTAT (0x65) Input Status Report Request
+                    Tamaño 1 byte 
+                    No actua ni responde ante un Broadcast
+                  
+                    Recorre inputs_pcl e informa el estado de cada una de las entradas y si reporta ante cambios mediante 1 byte por entrada.
+                        
+                    Comando de respuesta:
+                                            OSDP_ISTATR(0x49)
+
+            3.2.5.3 OSDP_OSTAT (0x66) Output Status Report Request
+                    Tamaño 1 byte 
+                    No actua ni responde ante un Broadcast
+                    
+                    Recorre outputs_signaling_pcl e informa el estado de cada una de las salidas mediante 1 byte por salida.
+
+                    Comando de respuesta:
+                                            OSDP_OSTATR(0x4A)
+
+            3.2.5.4 OSDP_OUT (0x68) Output Control Command
+                    Tamaño 6 bytes minimo. (1 byte para el comando y 4 bytes por salida que se indica)
+                    Actua pero no responde ante un Broadcast
+                    
+                    Chequea informacion recibida sobre salidas, clasifica y ejecuta. 
+                    Estan exceptuado de este comando los Leds que tienen una funcion definida
+
+                    Comando de respuesta:
+                                            OSDP_ACK(0x40)  Si todo se realizo bien
+                                            OSDP_NACK(0x41) Informa no realizado por salida no reconocida o no cumple con los 4 Byte por salida
+
+            3.2.5.5 OSDP_COMSET (0x6E) Communication Configuration Command
+                    Tamaño 6 bytes. (1 byte para el comando y 5 bytes mas para informar PD_ID y Baud Rate)
+                    No actua ni responde ante un Broadcast
+                    
+                    Efectua la actualizacion del PD-ID y la velocidad de comunicacion. Luego de aceptada la actualizacion informa, finalmente 
+                    genera un reset para que se adopten los nuevos valores.
+
+                    Comando de respuesta:
+                                            OSDP_COM(0x54)  Respuesta de cambio aceptado
+                                            OSDP_NACK(0x41)  Informa no realizado no reconocido
+
+        3.2.6 Comandos OSDP Skylock propietarios 
+            3.2.6.1 OSDP_FACTORY (0xD0) Set Factory Default
+                    Tamaño 1 byte. (1 byte para el comando)
+                    No actua ni responde ante un Broadcast
+                    
+                    Setea con parametros de fabrica y reinicia el sistema. Envia la respuesta al Panel de control, finalmente
+                    genera un reset del sistema para configurarlo con los parametros de Factory Default.
+
+                    Comando de respuesta:
+                                            OSDP_FACTORYR(0xD1) Respuesta de cambio aceptado
+                                            OSDP_NACK(0x41)     Informa no realizado no reconocido
+
+            3.2.6.2 OSDP_RESET (0xD2) Reset System
+                    Tamaño 1 byte. (1 byte para el comando)
+                    No actua ni responde ante un Broadcast
+                    
+                    Recibido el comando envia la respuesta de aceptado, luego genera el reset del sistema.
+
+                    Comando de respuesta:
+                                            OSDP_RESETR(0xD3) Respuesta de cambio aceptado
+                                            OSDP_NACK(0x41)   Informa no realizado no reconocido
+
+            3.2.6.3 OSDP_ESTABLISH (0xD4) Set Values
+                    Tamaño 3 bytes. (Comando + Atributo + dispositivo)
+                    No actua ni responde ante un Broadcast
+                    
+                    Permite habilitar o deshabilitar la accion reportar eventos de los dispositivos.
+                    El comando esta compuesto por tres bytes: Comando + Atributo + dispositivo. 
+                    Por default todos los dispositivos tienen deshabilitado el envio de eventos al 
+                    iniciarse o reiniciarse el sistema.    
+                    El atributo que acompaña al comando puede tener los siguientes valores:
+                                                  0x00:   Indica habilitar reportar evento.
+                                                  0x01:   Indica deshabilitar reportar evento. 
+
+                    Comando de respuesta:
+                                            OSDP_OSDP_ESTABLISHR(0xD4)  Respuesta de operacion confirmada
+                                            OSDP_NACK(0x41)             Informa no realizado no reconocido
+
+            3.2.6.4 OSDP_WATCH (0xD6) Status Errors Command
+                    Tamaño 2 bytes. (Comando + Atributo)
+                    No actua ni responde ante un Broadcast
+                    
+                    Permite visualizar e inicializar los distintos contadores de error y brinda informacion sobre
+                    la identificacion del sistema y el hardware asociado.
+                    El atributo que acompaña al comando puede tener los siguientes valores:
+                                              0x00:   Envia informacion sobre el sistema y el hardware asociado
+                                              0x01:   Envia informacion de los contadores de error(cnt_power.h) en el siguiente orden: 
+                                                      POR, BOR, TO, PD, RI . Cada variable es representada por un char
+                                              0x02:   Inicializa contadores de error en st_osdp.h 
+                                              0x03:   Envia informacion de los contadores de error(st_osdp.h) en el siguiente orden: count_err_chks_osdp, 
+                                                      count_min_byte_osdp, count_max_byte_osdp, count_max_buf_osdp. Cada variable es representada por un char
+                                              0x04:   Inicializa contadores de error en st_rs485 
+                                              0x05:   Envia informacion de los contadores de error(st_rs485) en el siguiente orden: count_FERR, count_OERR
+                                                      Cada variable es representada por un char
+                            
+                    Comando de respuesta:
+                                            OSDP_WATCHR(0xD7)   Esta compuesta por el comando OSDP_WATCHR + Atributo recibido + variables de 
+                                                                de error solicitadas por el comando OSDP_WATCH. Respuesta de operacion confirmada
+                                            OSDP_NACK(0x41)     Informa no realizado no reconocido
+
+            3.2.6.5 OSDP_CONFIG (0xD9) Configuracion del Sistema
+                    Tamaño 1 byte. (Comando)
+                    No actua ni responde ante un Broadcast
+                    
+                    Informa que se configurara la placa debido al Power-on o Reset ocurrido.
+
+                    Comando de respuesta:
+                                            OSDP_OSDP_CONFIGR(0xDA) Respuesta de operacion confirmada
+                                            OSDP_NACK(0x41)         Informa no realizado no reconocido
+
+            3.2.6.6 Comandos OSDP reconocidos y no implementados para Skylock
+                    OSDP_ID       (0x61)               
+                    OSDP_CAP      (0x62)  
+                    OSDP_DIAG     (0x63)  
+                    OSDP_LSTAT    (0x64)  
+                    OSDP_RSTAT    (0x67)  
+                    OSDP_LED      (0x69)  
+                    OSDP_BUZ      (0x6A)  
+                    OSDP_TEXT     (0x6B)      
+                    OSDP_TDSET    (0x6D)   
+                    OSDP_DATA     (0x6F)      
+                    OSDP_PROMPT   (0x71)  
+                    OSDP_BIOREAD  (0x73) 
+                    OSDP_KEYSET   (0x75)  
+                    OSDP_CHLNG    (0x76)   
+                    OSDP_MFG      (0x80)  
+
+                    Comando de respuesta en todos los casos:
+                        OSDP_NACK(0x41)         Informa no realizado no reconocido
+                        Atributo (0x03)         Indica Unknown Command Code ? Command not implemented by PD 
+
+            3.2.6.7 Comandos OSDP no reconocidos
+
+                    Comando de respuesta en todos los casos:
+                        OSDP_NACK(0x41)         Informa no realizado no reconocido
+                        Atributo (0x04)         Unexpected sequence number detected in the header 
+
+        3.2.7 Inicializacion-Servicio del sistema
+            3.2.7.1 Secuencia de inicializacion del sistema      
+                        1- Led Power On (Red color) Encendido indicando que la placa esta energizada
+                        2- Led out_led_3 (Green color) Encendido indicando que se esta inicializando                                                             
+                        3- Led out_led_0 (White color) Destellando si su PD_ID es 0x7E, en cambio si no lo es esta encendido fijo       
+                        4- Led out_led_1 (White color) Destellando esperando configuracion                                                            
+
+                        Luego de tres segundos aprox:
+                        5- Led out_led_3 (Green color) Destellando indicando sistema activo 
+
+                        Si el sistema recibe su configuracion 
+                        6- Led out_led_1 (White color) Apagado indicando que el PD fue configurado                                                            
+
+            3.2.7.2 Posterior a la inicializacion con PD_ID = 0x7E
+                    Si el PD_ID es 0x7E se dice que esta en la condicion Factory Default. 
+                    Solamente se permitira utiilizar el comandos OSDP_COMSET para configurar el nuevo PD_ID
+                    y la velocidad de comunicacion. El resto de comandos no se ejecutaran respondiendo al Panel de control 
+                    con OSDP_CHANGE_PDID (0xD8). Es decir solicitando el nuevo PD_ID.
+                    Si estando en esta condicion se recibe un broadcast PD_ID = 0X7F, se adiciona como comando permitido el
+                    OSDP_OUT(0x68).  
+
+            3.2.7.3 Posterior a la inicializacion con PD_ID = 0x00 - 0x7D
+                    Si el PD_ID esta entre 0x00 - 0x7D se dice que esta en la condicion User Default. 
+                    En esta condicion, despues del reinicio espera que se le envie la configuracion (out_led_1 detellando) por lo tanto
+                    el unico comando aceptado es el OSDP_CONFIG (OxD9) al cual respondera OSDP_CONFIGR (OxDA) apagando out_led_1. 
+                    Caso contrario respondera con OSDP_CONF_SYSTEM (0xD11) indicando al panel de control que necesita ser configurado.
+                    En esta condicion si se recibe un broadcast PD_ID = 0X7F, se adiciona como comando permitido el OSDP_OUT(0x68).  
+
+            3.2.7.4 En Servicio
+                    Luego de la inicializacion y configuracion el sistema se encuentra en modo productivo.
+                    Responde a todos los comandos reconocidos.
+                    El tiempo entre comunicaciones nos debera exceder el tiempo definido en ON_LINE que por defecto 
+                    se definio en 3 segundos para que permanezca en modo ON-line con led out_led_5 (Blue color) destellando.
+                    Tener en cuenta que despues de cada inicializacion se deben activar las entradas y los reader que se necesiten
+                    por default esta todo desactivado.
+
+            3.2.7.5 Configurar el sistema a Factory Default en forma manual
+                    Se debera presionar el touch switch por un tiempo mayor al definido en la constante TOUCH_SWITCH que
+                    definida para 30seg. Para tiempos menores el touch switch podra ser utilizado en otros propositos.
+
+4.  Temas pendientes de resolucion
+    - Analizar upgrade remoto del microcontrolador
+    - State Machine entradas analogicas. Conversion de I y muestreo
+    - Crear State Machine Manejo de sensores (INA216-LM75)
+    - Crear State Machine Manejo de eeprom externa
+    - Crear State Machine Manejo de display por i2c
+    - Probar con aplicacion de HID el protocolo OSDP Skylock v1.0
+    - Agregar seguridad sobre protocolo OSDP
+    - Lectura de tarjetas de proximidad. Seleccionar formatos.
+    - Compatibilidad reemplazo de LTC1460 por SN75176.
+
+5.  Temas a considerar en la proxima version
+    - Evaluar PIC18F67K40
+    - Se definio en reunion que no se utilizara gabinete de reel din, evaluar alternativa
+    - Investigar otras variantes de gabinetes
+    - Agregar salidas RS485 en PCL 
+    - Reducir tamaño del pcb en PCC y PCL
+    - Agregar conector I2C controlado por Compute Module 
+    - Considerar audio entrada-salida en placa PCC
+    - Considerar GPIOs adicionales 
+    - Considerar salidas rele adicionales placas PCC y PCL 
+    - Considerar ASC712 para todas las salidas a rele 
+    - Considerar entrada para sensores 1-wire lado Compute Module 
+    - Considerar HDMI placa PCC 
+    - Considerar grabacion de Compute Module sobre placa aunque todavia no fue aceptado 
+    - Considerar entradas digitales optoacopladas 
+    - Considerar sensado tension y corriente de bateria externa 
+    - Diseñar sistema ups bateria con monitoreo
+    - Buscar reemplazo de INA216 
+    - Alimentacion POE 
